@@ -5,7 +5,7 @@ import tensorflow as tf
 from ultralytics import YOLO
 import time
 from send_mail import EmailSender
-
+import threading
 class FallDetector:
     def __init__(self, tflite_path, yolo_path, frame_count=8):
         # Load TFLite
@@ -32,7 +32,6 @@ class FallDetector:
         # Chỉ xử lý mỗi 2 frame
         if frame_id % 2 != 0:
             return frame
-
         frame_small = cv2.resize(frame, (192, 192))
         results = self.pose_model.predict(frame_small, imgsz=192, conf=0.2, verbose=False)
             
@@ -43,13 +42,10 @@ class FallDetector:
         # Trong hàm process_frame
         if len(results[0].boxes) > 0:
             h_orig, w_orig = frame.shape[:2]
-            
             # Lấy thông tin box đầu tiên
             box = results[0].boxes.xyxy[0].cpu().numpy() 
             x1, y1, x2, y2 = box
-
-            # Lấy kích thước ảnh mà YOLO thực tế đã dùng để dự đoán
-            # results[0].orig_shape thường là (192, 192) do bạn đã resize trước đó
+            # Lấy kích thước ảnh 
             img_h_yolo, img_w_yolo = results[0].orig_shape 
 
             # Tính toán tỉ lệ scale chính xác
@@ -90,22 +86,43 @@ class FallDetector:
                 prob = float(output[0][0])
                 self.last_prob = prob
                 if prob > 0.98:
-                    print("FALL", prob)
                     self.last_label = "FALL"
                     if self.fall_start_time is None:
                         self.fall_start_time = time.time()
+                        self.captured_frame = None 
 
-                    if time.time() - self.last_email_time >= 10 and not self.dismissed:
-                        print("Send email alert")
-                        cv2.imwrite("fall_frame.png", frame)
-#                        self.email_sender.send_email("fall_frame.png")
- #                       self.last_email_time = time.time()
+                    elapsed = time.time() - self.fall_start_time
+                    print(f"Đã ngã được: {elapsed:.1f}s")
+
+                    if 2.0 <= elapsed <= 2.5 and self.captured_frame is None:
+                        self.captured_frame = frame.copy() 
+                        print("Đã chụp ảnh bằng chứng ở giây thứ 2")
+
+        
+                    if elapsed >= 10.0: #Sau 10 giây mà vẫn ngã thì gửi mail
+                        current_time = time.time()
+                        if not self.dismissed: #Nếu chưa dismiss thì mới gửi mail
+                            frame_to_send = self.captured_frame if self.captured_frame is not None else frame
+                            
+                            cv2.imwrite("fall_evidence.png", frame_to_send)
+                            print("Đủ 10 giây thì gửi mail cảnh báo ngã!")
+                            
+                            self.last_email_time = current_time
+                            
+                            email_thread = threading.Thread(
+                                target=self.email_sender.send_email, 
+                                args=("fall_evidence.png",),
+                                daemon=True
+                            )
+                            email_thread.start()
+                            
 
                 else:
-                    print("NORMAL", prob)
                     self.last_label = "NORMAL"
                     self.fall_start_time = None
-              
+                    self.captured_frame = None 
+                    if self.dismissed:
+                        self.dismissed = False
 
         return frame
 
