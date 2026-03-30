@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Fall Detection</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #141E30, #243B55);
+            color: white;
+            text-align: center;
+        }
+
+        h1 {
+            margin-top: 20px;
+            font-size: 32px;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+        }
+
+        .video-box {
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 0 30px rgba(0,0,0,0.6);
+            border: 3px solid rgba(255,255,255,0.2);
+        }
+
+        img {
+            width: 640px;
+            max-width: 95vw;
+        }
+
+        .status-box {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 15px;
+            width: 300px;
+            background: rgba(255,255,255,0.1);
+        }
+
+        .label {
+            font-size: 22px;
+            font-weight: bold;
+            padding: 8px 20px;
+            border-radius: 50px;
+            display: inline-block;
+        }
+
+        .fall {
+            background-color: #ff3b3b;
+            box-shadow: 0 0 15px #ff3b3b;
+        }
+
+        .normal {
+            background-color: #00c853;
+            box-shadow: 0 0 15px #00c853;
+        }
+
+        .prob {
+            margin-top: 10px;
+            font-size: 18px;
+        }
+
+        footer {
+            margin-top: 40px;
+            font-size: 14px;
+            opacity: 0.6;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>🤖 AI Fall Detection System</h1>
+
+    <div class="container">
+
+        <div class="video-box">
+            <img src="/video">
+        </div>
+
+        <div class="status-box">
+            <div id="statusLabel" class="label normal">NORMAL</div>
+            <div id="probability" class="prob">Probability: 0.00</div>
+        </div>
+
+    </div>
+
+    <footer>
+        Powered by YOLOv8 Pose + TFLite | Raspberry Pi 4
+    </footer>
+
+    <script>
+        async function updateStatus() {
+            try {
+                const response = await fetch('/status');
+                const data = await response.json();
+
+                const label = document.getElementById("statusLabel");
+                const prob = document.getElementById("probability");
+
+                label.innerText = data.label;
+                prob.innerText = "Probability: " + data.prob.toFixed(2);
+
+                if (data.label === "FALL") {
+                    label.className = "label fall";
+                } else {
+                    label.className = "label normal";
+                }
+            } catch (e) {
+                console.log("Status update error");
+            }
+        }
+
+        setInterval(updateStatus, 500);
+    </script>
+
+</body>
+</html>
