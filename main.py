@@ -7,9 +7,12 @@ from app import WebApp
 
 camera = CameraStream(0)
 
+# tflite_path="fall_model_pi_3.tflite"
+
+
 # Khởi tạo bộ phát hiện té ngã
 detector = FallDetector(
-    tflite_path="fall_model_pi_3.tflite",
+    tflite_path="fall_model_pi5.tflite",
     yolo_path="yolov8n-pose_19x.onnx",
     frame_count=8
 )

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Email Settings</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            margin: 0; font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #141E30, #243B55);
+            color: white; text-align: center; min-height: 100vh;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            width: 350px;
+            margin: 50px auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        input[type="email"] {
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            width: 100%;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            background: #00c853;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .email-list {
+            margin-top: 25px;
+            text-align: left;
+            list-style: none;
+            padding: 0;
+        }
+        .email-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255,255,255,0.05);
+            padding: 10px 15px;
+            border-radius: 10px;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        .btn-delete {
+            color: #ff3b3b;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .back-link {
+            display: block;
+            margin-top: 20px;
+            color: #aaa;
+            text-decoration: none;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h3>📧 Notification List</h3>
+        <p style="font-size: 13px; color: #ccc;">Add emails to receive fall alerts.</p>
+        
+        <form action="/add_email" method="POST">
+            <input type="email" name="email" placeholder="Enter Gmail address..." required>
+            <button type="submit">Add Email</button>
+        </form>
+
+        <ul class="email-list">
+            {% for email in emails %}
+            <li class="email-item">
+                {{ email }}
+                <a href="/delete_email/{{ email }}" class="btn-delete">✕</a>
+            </li>
+            {% endfor %}
+        </ul>
+
+        <a href="/" class="back-link">← Back to Live Feed</a>
+    </div>
+</body>
+</html>

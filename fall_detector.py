@@ -4,16 +4,17 @@ import numpy as np
 import tensorflow as tf
 from ultralytics import YOLO
 import time
-from send_mail import EmailSender
+from send_mail import EmailSender  # Đảm bảo file đặt tên đúng
+import threading
+import os
 
 class FallDetector:
     def __init__(self, tflite_path, yolo_path, frame_count=8):
-        # Load TFLite
+        # ... (giữ nguyên phần load model) ...
         self.interpreter = tf.lite.Interpreter(model_path=tflite_path)
         self.interpreter.allocate_tensors()
         self.input_details = self.interpreter.get_input_details()
         self.output_details = self.interpreter.get_output_details()
-
         self.pose_model = YOLO(yolo_path)
 
         self.sequence = []
@@ -24,102 +25,99 @@ class FallDetector:
 
         self.fall_start_time = None
         self.last_email_time = 0
+        self.email_sent_for_this_event = False # Quan trọng: Tránh gửi mail liên tục khi đang ngã
         self.dismissed = False
         self.email_sender = EmailSender()
+        self.email_file = "emails.txt"
+
+    def get_recipients(self):
+        """Hàm đọc danh sách email từ file txt"""
+        if not os.path.exists(self.email_file):
+            return []
+        with open(self.email_file, "r") as f:
+            return [line.strip() for line in f.readlines() if line.strip()]
+
     def process_frame(self, frame, frame_id):
-
-
-        # Chỉ xử lý mỗi 2 frame
         if frame_id % 2 != 0:
             return frame
-
+            
         frame_small = cv2.resize(frame, (192, 192))
         results = self.pose_model.predict(frame_small, imgsz=192, conf=0.2, verbose=False)
             
-        # vẽ bounding box và nhãn nếu có người được phát hiện
         if len(results[0].boxes) == 0:
             self.last_label = "NORMAL"
             self.last_prob = 0.0
-        # Trong hàm process_frame
-        if len(results[0].boxes) > 0:
+            self.fall_start_time = None # Reset nếu không thấy người
+            self.email_sent_for_this_event = False
+
+        else:
+            # --- Vẽ Bounding Box (giữ nguyên logic của bạn) ---
             h_orig, w_orig = frame.shape[:2]
-            
-            # Lấy thông tin box đầu tiên
             box = results[0].boxes.xyxy[0].cpu().numpy() 
             x1, y1, x2, y2 = box
-
-            # Lấy kích thước ảnh mà YOLO thực tế đã dùng để dự đoán
-            # results[0].orig_shape thường là (192, 192) do bạn đã resize trước đó
             img_h_yolo, img_w_yolo = results[0].orig_shape 
+            scale_x, scale_y = w_orig / img_w_yolo, h_orig / img_h_yolo
+            cv2.rectangle(frame, (int(x1*scale_x), int(y1*scale_y)), (int(x2*scale_x), int(y2*scale_y)), (0, 0, 255), 2)
 
-            # Tính toán tỉ lệ scale chính xác
-            scale_x = w_orig / img_w_yolo
-            scale_y = h_orig / img_h_yolo
+            # --- Xử lý Pose & Fall Detection ---
+            if len(results[0].keypoints) > 0:
+                keypoints = results[0].keypoints.xy[0].cpu().numpy().flatten()
+                self.sequence.append(keypoints)
+                if len(self.sequence) > self.FRAME_COUNT:
+                    self.sequence.pop(0)
 
-            # Chuyển đổi tọa độ về ảnh gốc
-            ix1 = int(x1 * scale_x)
-            iy1 = int(y1 * scale_y)
-            ix2 = int(x2 * scale_x)
-            iy2 = int(y2 * scale_y)
-            
-            # Vẽ lên khung hình gốc
-            cv2.rectangle(frame, (ix1, iy1), (ix2, iy2), (0, 0, 255), 2)
-            cv2.putText(frame, "Person", (ix1, iy1 - 10), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-        if len(results[0].keypoints) > 0:
-            keypoints = results[0].keypoints.xy[0].cpu().numpy().flatten()
+                if len(self.sequence) == self.FRAME_COUNT:
+                    input_data = np.array(self.sequence, dtype=np.float32).reshape(1, self.FRAME_COUNT, 34)
+                    self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
+                    self.interpreter.invoke()
+                    output = self.interpreter.get_tensor(self.output_details[0]['index'])
+                    
+                    prob = float(output[0][0])
+                    self.last_prob = prob
 
-            self.sequence.append(keypoints)
+                    if prob > 0.98:
+                        self.last_label = "FALL"
+                        if self.fall_start_time is None:
+                            self.fall_start_time = time.time()
+                            self.captured_frame = None 
+                            self.email_sent_for_this_event = False # Reset cho sự kiện mới
 
-            if len(self.sequence) > self.FRAME_COUNT:
-                self.sequence.pop(0)
+                        elapsed = time.time() - self.fall_start_time
 
-            if len(self.sequence) == self.FRAME_COUNT:
-                input_data = np.array(self.sequence, dtype=np.float32)
-                input_data = input_data.reshape(1, self.FRAME_COUNT, 34)
+                        # Chụp ảnh bằng chứng
+                        if 2.0 <= elapsed <= 2.5 and self.captured_frame is None:
+                            self.captured_frame = frame.copy()
 
-                self.interpreter.set_tensor(
-                    self.input_details[0]['index'], input_data
-                )
-                self.interpreter.invoke()
-
-                output = self.interpreter.get_tensor(
-                    self.output_details[0]['index']
-                )
-
-                prob = float(output[0][0])
-                self.last_prob = prob
-                if prob > 0.98:
-                    print("FALL", prob)
-                    self.last_label = "FALL"
-                    if self.fall_start_time is None:
-                        self.fall_start_time = time.time()
-
-                    if time.time() - self.last_email_time >= 10 and not self.dismissed:
-                        print("Send email alert")
-                        cv2.imwrite("fall_frame.png", frame)
-#                        self.email_sender.send_email("fall_frame.png")
- #                       self.last_email_time = time.time()
-
-                else:
-                    print("NORMAL", prob)
-                    self.last_label = "NORMAL"
-                    self.fall_start_time = None
-              
-
+                        # Gửi mail sau 10 giây nếu chưa dismiss và chưa gửi cho lần ngã này
+                        if elapsed >= 10.0 and not self.dismissed and not self.email_sent_for_this_event:
+                            recipients = self.get_recipients()
+                            if recipients:
+                                frame_to_send = self.captured_frame if self.captured_frame is not None else frame
+                                ok, buffer = cv2.imencode(".png", frame_to_send)
+                                if ok:
+                                    img_bytes = buffer.tobytes()
+                                    threading.Thread(
+                                        target=self.email_sender.send_email_bytes,
+                                        args=(recipients, img_bytes),
+                                        daemon=True
+                                    ).start()
+                                
+                                self.email_sent_for_this_event = True # Đánh dấu đã gửi
+                                print(f"📧 Đã gửi cảnh báo tới {len(recipients)} email.")
+                    else:
+                        # Reset trạng thái khi đứng dậy (NORMAL)
+                        self.last_label = "NORMAL"
+                        self.fall_start_time = None
+                        self.captured_frame = None 
+                        self.email_sent_for_this_event = False
+                        if self.dismissed:
+                            self.dismissed = False # Sẵn sàng cho lần ngã tiếp theo
+                    print(self.dismissed)
         return frame
 
     def draw_label(self, frame):
+        # ... (giữ nguyên) ...
         color = (0, 0, 255) if self.last_label == "FALL" else (0, 255, 0)
-
-        cv2.putText(
-            frame,
-            f"{self.last_label} {self.last_prob:.2f}",
-            (30, 50),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1,
-            color,
-            2
-        )
-
+        cv2.putText(frame, f"{self.last_label} {self.last_prob:.2f}", (30, 50),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
         return frame
