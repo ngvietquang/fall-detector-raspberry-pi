@@ -4,15 +4,11 @@ import numpy as np
 import tensorflow as tf
 from ultralytics import YOLO
 import time
-<<<<<<< HEAD
 from send_mail import EmailSender  # Đảm bảo file đặt tên đúng
 import threading
 import os
-
-=======
 from send_mail import EmailSender
 import threading
->>>>>>> aed9033d64c2d4e890eb1a25ed6e7a26024f74fd
 class FallDetector:
     def __init__(self, tflite_path, yolo_path, frame_count=8):
         # ... (giữ nguyên phần load model) ...
