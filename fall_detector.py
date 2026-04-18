@@ -7,8 +7,7 @@ import time
 from send_mail import EmailSender  # Đảm bảo file đặt tên đúng
 import threading
 import os
-from send_mail import EmailSender
-import threading
+
 class FallDetector:
     def __init__(self, tflite_path, yolo_path, frame_count=8):
         # ... (giữ nguyên phần load model) ...
@@ -117,7 +116,6 @@ class FallDetector:
         return frame
 
     def draw_label(self, frame):
-        # ... (giữ nguyên) ...
         color = (0, 0, 255) if self.last_label == "FALL" else (0, 255, 0)
         cv2.putText(frame, f"{self.last_label} {self.last_prob:.2f}", (30, 50),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
