@@ -5,11 +5,12 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 import datetime
-
+USER = ""
+PASS = ""
 class EmailSender:
     def __init__(self):
-        self.sender_email = "ngvietquang377@gmail.com"
-        self.password = os.getenv("GMAIL_APP_PASSWORD", "uoik ulrr jklx qaba")
+        self.sender_email = USER
+        self.password = os.getenv("GMAIL_APP_PASSWORD", PASS)
 
         try:
             with open("templates/form_gmail.html", "r", encoding="utf-8") as f:
